@@ -1,0 +1,118 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 220 20% 10%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 18% 14%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 18% 12%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 188 94% 55%;
+    --primary-foreground: 220 20% 10%;
+
+    --secondary: 220 16% 22%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 220 16% 18%;
+    --muted-foreground: 215 20% 65%;
+
+    --accent: 18 92% 62%;
+    --accent-foreground: 220 20% 10%;
+
+    --success: 142 76% 56%;
+    --success-foreground: 220 20% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 220 16% 22%;
+    --input: 220 16% 22%;
+    --ring: 188 94% 55%;
+
+    --radius: 0.75rem;
+
+    --gradient-primary: linear-gradient(135deg, hsl(188 94% 55%), hsl(195 94% 65%));
+    --gradient-accent: linear-gradient(135deg, hsl(18 92% 62%), hsl(25 92% 70%));
+    --gradient-success: linear-gradient(135deg, hsl(142 76% 56%), hsl(150 76% 64%));
+    --gradient-hero: linear-gradient(135deg, hsl(220 20% 10%), hsl(220 25% 15%));
+    
+    --shadow-glow: 0 0 40px hsl(188 94% 55% / 0.3);
+    --shadow-accent-glow: 0 0 40px hsl(18 92% 62% / 0.3);
+    --shadow-elevated: 0 20px 60px -10px hsl(220 20% 5% / 0.5);
+
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 20px hsl(188 94% 55% / 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px hsl(188 94% 55% / 0.6);
+    }
+  }
+
+  @keyframes data-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.05);
+    }
+  }
+
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+
+  .animate-data-pulse {
+    animation: data-pulse 1s ease-in-out infinite;
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.5s ease-out;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
