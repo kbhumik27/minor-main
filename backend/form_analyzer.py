@@ -155,6 +155,10 @@ class DemoMode:
         self.speed = 1  # degrees per update (slowed down from 2)
         self.rep_count = 0
         self.heart_rate = 70
+        self.last_beat_time = time.time()
+        self.beat_interval = 60.0 / 70
+        self.step_phase = 0.0
+        self.step_frequency = 1.8  # Hz (108 steps per minute for running)
         self.exercise_params = {
             'bicep_curl': {
                 'min_angle': 0,
@@ -201,8 +205,11 @@ class DemoMode:
         """Stop demo mode"""
         self.running = False
         self.exercise = 'Ready'
-        self.transition_state = 'stopping'
-        self.transition_timer = 10
+        self.transition_state = None
+        self.transition_timer = 0
+        self.current_angle = 0
+        self.direction = 1
+        self.step_phase = 0.0
         
     def _update_heart_rate(self):
         """Simulate heart rate changes based on exercise intensity"""
@@ -232,11 +239,6 @@ class DemoMode:
     def _get_acceleration_data(self):
         """Generate realistic acceleration data based on movement"""
         params = self.exercise_params.get(self.exercise, {})
-        
-        # Initialize step simulation variables if not present
-        if not hasattr(self, 'step_phase'):
-            self.step_phase = 0.0
-            self.step_frequency = 1.8  # Hz (108 steps per minute for running)
         
         # Base acceleration affected by movement and fatigue
         ax = random.uniform(-0.1, 0.1) * (1 + self.fatigue_factor * 0.2)
@@ -440,16 +442,26 @@ class FormAnalyzer:
         self._min_step_interval = 0.3  # Minimum 300ms between steps
         self._max_step_interval = 2.0  # Maximum 2s between steps
         self._peak_buffer = deque(maxlen=10)  # Track recent peaks
+        
+        # Initialize demo mode variables for heart rate
+        if not hasattr(self.demo_mode, 'last_beat_time'):
+            self.demo_mode.last_beat_time = time.time()
+            self.demo_mode.beat_interval = 60.0 / 70  # Default 70 BPM
     
     def _load_activity_model(self):
         """Load the trained activity classifier model"""
-        model_path = os.path.join(os.path.dirname(__file__), 'model.joblib')
+        # Look in the model directory (sibling to backend directory)
+        backend_dir = os.path.dirname(__file__)
+        model_dir = os.path.join(os.path.dirname(backend_dir), 'model')
+        model_path = os.path.join(model_dir, 'model.joblib')
+        
         try:
             if os.path.exists(model_path):
                 self.activity_model = joblib.load(model_path)
                 print(f"✓ Activity classifier model loaded from {model_path}")
             else:
                 print(f"⚠ Activity model not found at {model_path}")
+                print(f"  Checked: {model_path}")
                 self.activity_model = None
         except Exception as e:
             print(f"✗ Error loading activity model: {e}")

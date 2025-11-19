@@ -53,7 +53,7 @@ connected_to_esp32 = False
 esp32_websocket = None
 data_log = []
 logging_enabled = False
-demo_mode = False  # Demo mode disabled (endpoints return 410)
+demo_mode = False  # Demo mode can be enabled via API
 
 # AI Model placeholder (load your trained model here)
 ai_model = None
@@ -126,8 +126,9 @@ async def connect_to_esp32(esp32_url):
                     
                     # Analyze or at least compute activity/steps every frame
                     analyzer_mode = getattr(form_analyzer, 'mode', 'normal')
+                    
                     if sensor_data.get('exercise') != 'Ready':
-                        # Full analysis path (includes steps/calories internally)
+                        # Full analysis path (includes rep detection and step/activity processing)
                         score, feedback, rep_detected = form_analyzer.analyze(
                             sensor_data.get('exercise', 'bicep_curl'),
                             data.get('pitch', 0),
@@ -141,11 +142,17 @@ async def connect_to_esp32(esp32_url):
                         if rep_detected:
                             sensor_data['repCount'] = sensor_data.get('repCount', 0) + 1
                     else:
-                        # Ensure steps/activity/calories still update in normal mode
+                        # In Ready mode, only process activity/steps (no exercise analysis)
                         try:
                             form_analyzer._process_activity_and_steps(data)
                         except Exception as e:
                             print(f"⚠ Activity/steps processing error: {e}")
+                        
+                        # Reset mesh to neutral position
+                        form_analyzer.mesh.reset_positions()
+                        sensor_data['meshData'] = form_analyzer.get_mesh_data()
+                        sensor_data['formScore'] = 0
+                        sensor_data['feedback'] = ''
 
                     # Always merge analyzer-derived metrics (steps, activity, speed, calories)
                     try:
@@ -158,12 +165,17 @@ async def connect_to_esp32(esp32_url):
                             sensor_data['activityConfidence'] = metrics.get('activityConfidence', 0.0)
                             sensor_data['runningSpeedKmh'] = metrics.get('runningSpeedKmh', 0.0)
                             sensor_data['caloriesTotal'] = metrics.get('caloriesTotal', 0.0)
-                    except Exception:
-                        pass
+                            
+                            # Debug: Log when step is detected
+                            if metrics.get('stepDetected'):
+                                print(f"👟 Step detected! Total steps: {sensor_data['stepCount']}")
+                    except Exception as e:
+                        print(f"⚠ Error merging metrics: {e}")
                     
                     # Debug print to verify heart rate is being received
-                    print(f"📊 Current sensor_data - HR: {sensor_data.get('heartRate', 'N/A')}, Pulse: {sensor_data.get('pulse', 'N/A')}, Beat: {sensor_data.get('beatDetected', 'N/A')}")
-                    print(f"   Exercise: {sensor_data.get('exercise')}, Pitch: {sensor_data.get('pitch', 0):.1f}°\n")
+                    print(f"📊 Current sensor_data - HR: {sensor_data.get('heartRate', 'N/A')}, Beat: {sensor_data.get('beatDetected', 'N/A')}")
+                    print(f"   Exercise: {sensor_data.get('exercise')}, Pitch: {sensor_data.get('pitch', 0):.1f}°")
+                    print(f"   Steps: {sensor_data.get('stepCount', 0)}, Reps: {sensor_data.get('repCount', 0)}, Activity: {sensor_data.get('activity', 'unknown')}\n")
                     
                     # Broadcast to all connected clients
                     socketio.emit('sensor_data', sensor_data)
@@ -242,8 +254,12 @@ def connect_esp32_endpoint():
     data = request.json
     esp32_url = data.get('url', 'ws://192.168.1.100:81')
     
-    # Demo mode disabled
-    demo_mode = False
+    # Disable demo mode when connecting to real ESP32
+    if demo_mode:
+        demo_mode = False
+        # Stop demo if running
+        if hasattr(form_analyzer, 'demo_mode') and form_analyzer.demo_mode:
+            form_analyzer.stop_demo()
     
     # Start connection in background thread
     thread = threading.Thread(target=run_esp32_connection, args=(esp32_url,))
@@ -262,13 +278,64 @@ def disconnect_esp32():
 
 @app.route('/api/start_demo', methods=['POST'])
 def start_demo():
-    """Demo mode is disabled."""
-    return jsonify({'error': 'demo_mode_disabled'}), 410
+    """Start demo mode with simulated sensor data"""
+    global demo_mode, connected_to_esp32
+    
+    # Disconnect from ESP32 if connected
+    if connected_to_esp32:
+        connected_to_esp32 = False
+    
+    data = request.json
+    exercise = data.get('exercise', 'bicep_curl')
+    
+    demo_mode = True
+    sensor_data['exercise'] = exercise
+    
+    # Check if FormAnalyzer has demo capabilities
+    if not hasattr(form_analyzer, 'start_demo'):
+        return jsonify({'error': 'Demo mode not available in FormAnalyzer'}), 501
+    
+    result = form_analyzer.start_demo(exercise)
+    
+    # Start demo data generation in background
+    def demo_data_generator():
+        while demo_mode and hasattr(form_analyzer, 'demo_mode') and form_analyzer.demo_mode.running:
+            demo_data = form_analyzer.get_demo_data()
+            if demo_data:
+                sensor_data.update(demo_data)
+                
+                # Analyze form
+                score, feedback, rep_detected = form_analyzer.analyze(
+                    exercise,
+                    demo_data.get('pitch', 0),
+                    demo_data.get('roll', 0),
+                    demo_data
+                )
+                
+                sensor_data['formScore'] = score
+                sensor_data['feedback'] = ' | '.join(feedback) if feedback else ''
+                sensor_data['meshData'] = form_analyzer.get_mesh_data()
+                
+                if rep_detected:
+                    sensor_data['repCount'] = sensor_data.get('repCount', 0) + 1
+                
+                socketio.emit('sensor_data', sensor_data)
+            socketio.sleep(0.1)  # Update at 10Hz
+    
+    socketio.start_background_task(demo_data_generator)
+    return jsonify(result)
 
 @app.route('/api/stop_demo', methods=['POST'])
 def stop_demo():
-    """Demo mode is disabled."""
-    return jsonify({'error': 'demo_mode_disabled'}), 410
+    """Stop demo mode"""
+    global demo_mode
+    demo_mode = False
+    
+    if hasattr(form_analyzer, 'stop_demo'):
+        result = form_analyzer.stop_demo()
+        return jsonify(result)
+    
+    return jsonify({'status': 'demo_stopped', 'demo_mode': False})
 
 
 @app.route('/api/send_command', methods=['POST'])
